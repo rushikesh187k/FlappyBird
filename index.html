@@ -1,16 +1,167 @@
-
 <!DOCTYPE html>
-<html>
-<head>
-<title>Angry Pixel Bird</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rasengan → Rasenshuriken</title>
 <style>
-body { margin:0; background:#70c5ce; overflow:hidden; }
-canvas { display:block; margin:auto; background:#70c5ce; }
-</style>
-</head>
+html,body{margin:0;height:100%;background:#000;overflow:hidden}
+canvas{width:100%;height:100%;object-fit:cover;display:block}
+#msg{position:fixed;top:14px;left:0;right:0;text-align:center;color:#9df;font:600 17px sans-serif;text-shadow:0 0 8px #0af}
+</style></head>
 <body>
-<canvas id="game" width="320" height="480"></canvas>
-<script src="game.js"></script>
-</body>
-</html>
+<video id="v" playsinline muted style="display:none"></video>
+<canvas id="c"></canvas>
+<div id="msg">Loading camera…</div>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script>
+const HOLD_MS = 5000;               // time before transformation
+const v = document.getElementById('v');
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const msg = document.getElementById('msg');
+cv.width = 1280; cv.height = 720;
+const W = cv.width, H = cv.height;
+
+let hand = null;                    // latest landmarks
+let pos = {x: W/2, y: H/2}, size = 60;
+let holdStart = 0, lastSeen = 0, transformed = false, flashAt = 0;
+
+const d = (a,b)=>Math.hypot(a.x-b.x, a.y-b.y);
+function isOpen(lm){
+  let n = 0;
+  [[8,6],[12,10],[16,14],[20,18]].forEach(([t,p])=>{ if(d(lm[t],lm[0]) > d(lm[p],lm[0])*1.05) n++; });
+  return n >= 3;
+}
+
+const hands = new Hands({locateFile: f => 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/' + f});
+hands.setOptions({maxNumHands:1, modelComplexity:1, minDetectionConfidence:0.6, minTrackingConfidence:0.6});
+hands.onResults(res => {
+  const now = performance.now();
+  if (res.multiHandLandmarks && res.multiHandLandmarks.length) {
+    const lm = res.multiHandLandmarks[0];
+    hand = lm;
+    if (isOpen(lm)) {
+      lastSeen = now;
+      if (!holdStart) holdStart = now;
+      const ids = [0,5,9,13,17];
+      let cx = 0, cy = 0;
+      ids.forEach(i => { cx += (1-lm[i].x)*W; cy += lm[i].y*H; });
+      cx /= ids.length; cy /= ids.length;
+      const s = d({x:(1-lm[0].x)*W,y:lm[0].y*H},{x:(1-lm[9].x)*W,y:lm[9].y*H});
+      pos.x += (cx-pos.x)*0.5;
+      pos.y += (cy-pos.y - s*0.55 - pos.y + pos.y)*0.0 + ((cy - s*0.55) - pos.y)*0.5;
+      size += (s*0.55 - size)*0.3;
+    }
+  } else hand = null;
+});
+
+new Camera(v, {onFrame: async()=>{ await hands.send({image:v}); }, width:1280, height:720})
+  .start().then(()=>{ msg.textContent = 'Show your open palm ✋'; })
+  .catch(()=>{ msg.textContent = 'Camera blocked – allow it & use https/localhost'; });
+
+function rasengan(r, t, p){
+  ctx.globalCompositeOperation = 'lighter';
+  let g = ctx.createRadialGradient(0,0,0,0,0,r*2.3);
+  g.addColorStop(0,'rgba(255,255,255,.9)'); g.addColorStop(.3,'rgba(120,210,255,.55)');
+  g.addColorStop(1,'rgba(0,120,255,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0,0,r*2.3,0,7); ctx.fill();
+  const spin = 3 + p*10;
+  for (let i=0;i<16;i++){
+    ctx.save();
+    ctx.rotate(t*spin*0.001*(i%2?1:-1) + i*0.4);
+    ctx.strokeStyle = `rgba(${150+i*6},${220},255,${.25+.03*i})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(0,0,r,r*(0.15+i*0.055),0,0,7); ctx.stroke();
+    ctx.restore();
+  }
+  g = ctx.createRadialGradient(0,0,0,0,0,r*.5);
+  g.addColorStop(0,'rgba(255,255,255,1)'); g.addColorStop(1,'rgba(255,255,255,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0,0,r*.5,0,7); ctx.fill();
+}
+
+function shuriken(r, t){
+  ctx.globalCompositeOperation = 'lighter';
+  let g = ctx.createRadialGradient(0,0,0,0,0,r*3);
+  g.addColorStop(0,'rgba(255,255,255,.8)'); g.addColorStop(.35,'rgba(90,190,255,.4)');
+  g.addColorStop(1,'rgba(0,100,255,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0,0,r*3,0,7); ctx.fill();
+  const ang = t*0.02;
+  ctx.shadowColor = '#4cf'; ctx.shadowBlur = 25;
+  for (let k=0;k<4;k++){
+    ctx.save(); ctx.rotate(ang + k*Math.PI/2);
+    const R = r*1.2;
+    ctx.beginPath();
+    ctx.moveTo(0,-R*0.25);
+    ctx.quadraticCurveTo(R*0.9,-R*0.7,R*1.8,0);
+    ctx.quadraticCurveTo(R*0.8,-R*0.05,0,R*0.25);
+    ctx.closePath();
+    const bg = ctx.createLinearGradient(0,0,R*1.8,0);
+    bg.addColorStop(0,'rgba(255,255,255,.95)'); bg.addColorStop(1,'rgba(80,180,255,.8)');
+    ctx.fillStyle = bg; ctx.fill();
+    ctx.restore();
+  }
+  ctx.shadowBlur = 0;
+  // spinning rings + core
+  for (let i=0;i<6;i++){
+    ctx.save(); ctx.rotate(-ang*1.5 + i*0.5);
+    ctx.strokeStyle = 'rgba(200,240,255,.5)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(0,0,r*1.1,r*(0.2+i*0.14),0,0,7); ctx.stroke();
+    ctx.restore();
+  }
+  ctx.strokeStyle = 'rgba(160,220,255,.6)'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(0,0,r*2.1,0,7); ctx.stroke();
+  g = ctx.createRadialGradient(0,0,0,0,0,r*.7);
+  g.addColorStop(0,'#fff'); g.addColorStop(1,'rgba(255,255,255,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0,0,r*.7,0,7); ctx.fill();
+}
+
+function loop(now){
+  requestAnimationFrame(loop);
+  // video (mirrored)
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.save(); ctx.translate(W,0); ctx.scale(-1,1);
+  if (v.readyState >= 2) ctx.drawImage(v,0,0,W,H);
+  ctx.restore();
+
+  // skeleton
+  if (hand){
+    ctx.strokeStyle = 'rgba(255,120,30,.9)'; ctx.fillStyle = '#ff8a2a'; ctx.lineWidth = 3;
+    HAND_CONNECTIONS.forEach(([a,b])=>{
+      ctx.beginPath(); ctx.moveTo((1-hand[a].x)*W,hand[a].y*H); ctx.lineTo((1-hand[b].x)*W,hand[b].y*H); ctx.stroke();
+    });
+    hand.forEach(p=>{ ctx.beginPath(); ctx.arc((1-p.x)*W,p.y*H,4,0,7); ctx.fill(); });
+  }
+
+  // lost hand → reset
+  const active = holdStart && now - lastSeen < 400;
+  if (!active){ holdStart = 0; transformed = false; msg.textContent = 'Show your open palm ✋'; return; }
+
+  const held = now - holdStart;
+  const p = Math.min(held/HOLD_MS, 1);
+  if (p >= 1 && !transformed){ transformed = true; flashAt = now; }
+
+  ctx.save(); ctx.translate(pos.x, pos.y);
+  if (!transformed){
+    const r = size*(0.35 + 0.65*p);
+    rasengan(r, now, p);
+    msg.textContent = 'Charging Rasengan… ' + Math.ceil((HOLD_MS-held)/1000) + 's';
+  } else {
+    const grow = Math.min((now-flashAt)/500, 1);
+    shuriken(size*(0.9 + 0.5*grow), now);
+    msg.textContent = '風遁・螺旋手裏剣  FUTON: RASENSHURIKEN!';
+  }
+  ctx.restore();
+
+  // flash + shockwave on transform
+  const f = (now - flashAt)/700;
+  if (transformed && f < 1){
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = `rgba(200,240,255,${0.6*(1-f)})`; ctx.fillRect(0,0,W,H);
+    ctx.strokeStyle = `rgba(150,220,255,${1-f})`; ctx.lineWidth = 8;
+    ctx.beginPath(); ctx.arc(pos.x,pos.y,size*(1+f*6),0,7); ctx.stroke();
+  }
+}
+const HAND_CONNECTIONS = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+requestAnimationFrame(loop);
+</script>
+</body></html>
